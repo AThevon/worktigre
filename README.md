@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://worktigre.vercel.app">Website</a> •
-  <a href="https://worktigre.vercel.app/docs">Documentation</a> •
+  <a href="https://worktigre.athevon.dev">Website</a> •
+  <a href="https://worktigre.athevon.dev/docs">Documentation</a> •
   <a href="#installation">Installation</a>
 </p>
 
@@ -244,3 +244,16 @@ rm ~/.local/bin/wt-core
 ## License
 
 GPL-3.0
+
+---
+
+<p align="center">
+  Built by <a href="https://athevon.dev"><strong>Adrien Thevon</strong></a>, software engineer in Toulouse.
+  <br />
+  <sub>
+    Also mine:
+    <a href="https://github.com/AThevon/TokenEater">TokenEater</a>, a native macOS monitor for Claude usage limits
+    &nbsp;·&nbsp;
+    <a href="https://github.com/AThevon/genjutsu">genjutsu</a>, creative coding skills for Claude
+  </sub>
+</p>
