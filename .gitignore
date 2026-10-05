@@ -1,1 +1,5 @@
 .superpowers/
+.claude/settings.local.json
+# nix build
+result
+result-*
