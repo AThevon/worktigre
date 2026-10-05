@@ -7,7 +7,7 @@
 # Tous les messages vont sur stderr pour ne pas polluer le résultat
 # =============================================================================
 
-VERSION="2.2.0"
+VERSION="2.3.0"
 
 # Resolve the real location of this script, following symlinks
 # (~/.local/bin/wt-core, Homebrew's bin/ link, a --setup symlink...)
