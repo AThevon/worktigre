@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# lib/ui.sh — UI functions using gum (Charmbracelet)
+# lib/ui.sh - UI functions using gum (Charmbracelet)
 # Requires: gum in PATH, core.sh sourced first (for C_* color vars)
-
-ui_success() {
-  gum log --level info "$@" >&2
-}
 
 ui_warn() {
   gum log --level warn "$@" >&2
@@ -14,14 +10,8 @@ ui_error() {
   gum log --level error "$@" >&2
 }
 
-ui_spin() {
-  local title="$1"
-  shift
-  gum spin --spinner dot --title "$title" -- "$@"
-}
-
-# Like ui_spin but for bash functions (not external commands).
-# Runs the function in background, shows spinner, returns stdout.
+# Run a bash function (not an external command) in the background behind a
+# gum spinner, and return its stdout.
 ui_spin_fn() {
   local title="$1"; shift
   local _tmpfile
@@ -45,27 +35,26 @@ ui_confirm() {
     "$@"
 }
 
+# ui_input <prompt> [placeholder] [initial value]
 ui_input() {
   local prompt="${1:-}"
   local placeholder="${2:-}"
+  local value="${3:-}"
   local args=()
   [[ -n "$prompt" ]] && args+=(--prompt "$prompt ")
   [[ -n "$placeholder" ]] && args+=(--placeholder "$placeholder")
-  gum input "${args[@]}"
-}
-
-ui_header() {
-  gum style --border rounded --foreground 208 --border-foreground 208 --padding "0 1" "$@" >&2
+  [[ -n "$value" ]] && args+=(--value "$value")
+  gum input ${args[@]+"${args[@]}"}
 }
 
 ui_box() {
   gum style --border rounded --padding "0 1" "$@" >&2
 }
 
-# Print the logo — responsive: full / medium / small depending on terminal width
+# Print the logo - responsive: full / medium / small depending on terminal width
 print_logo() {
   local assets_dir="$SCRIPT_DIR/assets"
-  # Nix install: assets/ is at $out/assets/worktigre/
+  # Homebrew / Nix: assets/ lives in <prefix>/assets/worktigre, next to bin/
   if [[ ! -d "$assets_dir" ]] || [[ ! -f "$assets_dir/logo.ansi" ]]; then
     assets_dir="$(dirname "$SCRIPT_DIR")/assets/worktigre"
   fi
@@ -75,7 +64,9 @@ print_logo() {
     return
   fi
 
-  local cols=$(stty size 2>/dev/tty </dev/tty | cut -d' ' -f2 2>/dev/null || echo 80)
+  local cols
+  cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2)
+  [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
   local logo_file
   if (( cols >= 125 )); then
     logo_file="$assets_dir/logo.ansi"

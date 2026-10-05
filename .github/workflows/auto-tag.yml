@@ -7,44 +7,84 @@ on:
     paths:
       - 'wt.sh'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-tag
+  cancel-in-progress: false
+
 jobs:
+  # Nothing is tagged or released unless shellcheck and the tests pass
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   tag-and-release:
+    needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      # The tag may already exist when the release was cut by hand (`gh release
+      # create` pushes it). If it points at this commit, this is still the
+      # release push: the release and the Homebrew update must not be skipped.
       - name: Extract version and create tag
         id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(grep -m1 'VERSION=' wt.sh | cut -d'"' -f2)
+          VERSION=$(grep -m1 '^VERSION=' wt.sh | cut -d'"' -f2)
+          if [ -z "$VERSION" ]; then
+            echo "::error::No VERSION=\"...\" line in wt.sh"
+            exit 1
+          fi
           TAG="v$VERSION"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists, skipping"
-            echo "created=false" >> $GITHUB_OUTPUT
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Creating tag $TAG on $GITHUB_SHA"
+            git tag "$TAG" "$GITHUB_SHA"
+            if ! git push origin "refs/tags/$TAG"; then
+              # Pushed by someone else in the meantime: compare with theirs
+              if ! git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"; then
+                echo "::error::Could not push tag $TAG"
+                exit 1
+              fi
+            fi
+          fi
+
+          TAG_SHA=$(git rev-parse "$TAG^{commit}")
+          if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+            echo "Tag $TAG already exists on $TAG_SHA (not this commit), nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "dispatch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "dispatch=true" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            echo "release=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Creating tag $TAG"
-            git tag "$TAG"
-            git push origin "$TAG"
-            echo "created=true" >> $GITHUB_OUTPUT
+            echo "release=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Release
-        if: steps.tag.outputs.created == 'true'
-        uses: softprops/action-gh-release@v1
+        if: steps.tag.outputs.release == 'true'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
 
       - name: Trigger Homebrew formula update
-        if: steps.tag.outputs.created == 'true'
-        uses: peter-evans/repository-dispatch@v2
+        if: steps.tag.outputs.dispatch == 'true'
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           repository: AThevon/homebrew-worktigre

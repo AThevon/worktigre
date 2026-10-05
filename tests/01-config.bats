@@ -29,7 +29,7 @@ teardown() {
 
 @test "save_config_value: writes a new key to config file" {
   save_config_value "WT_LIST_LIMIT" "50"
-  run grep "^WT_LIST_LIMIT=50" "$WT_CONFIG_FILE"
+  run grep -x 'WT_LIST_LIMIT="50"' "$WT_CONFIG_FILE"
   assert_success
 }
 
@@ -39,19 +39,19 @@ teardown() {
   local count
   count=$(grep -c "^WT_LIST_LIMIT=" "$WT_CONFIG_FILE")
   assert_equal "$count" "1"
-  run grep "^WT_LIST_LIMIT=99" "$WT_CONFIG_FILE"
+  run grep -x 'WT_LIST_LIMIT="99"' "$WT_CONFIG_FILE"
   assert_success
 }
 
 @test "save_config_value: handles value with pipe character" {
   save_config_value "WT_FEATURE_PREFIX" "feat|fix/"
-  run grep "^WT_FEATURE_PREFIX=feat|fix/" "$WT_CONFIG_FILE"
+  run grep -xF 'WT_FEATURE_PREFIX="feat|fix/"' "$WT_CONFIG_FILE"
   assert_success
 }
 
 @test "save_config_value: handles value with ampersand" {
   save_config_value "WT_FEATURE_PREFIX" "feat&fix/"
-  run grep "^WT_FEATURE_PREFIX=feat&fix/" "$WT_CONFIG_FILE"
+  run grep -xF 'WT_FEATURE_PREFIX="feat&fix/"' "$WT_CONFIG_FILE"
   assert_success
 }
 

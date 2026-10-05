@@ -5,26 +5,49 @@ on:
     branches: [ main, feature/* ]
   pull_request:
     branches: [ main ]
+  # Also run by auto-tag.yml before it tags a release
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   shellcheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
           scandir: '.'
           severity: error
-          ignore_paths: 'completions'
+          additional_files: '.bats'
+          # completions/ is zsh, the others are the BATS submodules
+          ignore_paths: 'completions tests/bats tests/test_helper/bats-support tests/test_helper/bats-assert'
 
   bats:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS runs the suite with /bin/bash 3.2, the bash wt runs with there
+        os: [ ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
+      - name: Use the system bash 3.2
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$RUNNER_TEMP/bash32"
+          ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
+          echo "$RUNNER_TEMP/bash32" >> "$GITHUB_PATH"
+
       - name: Run BATS tests
-        run: ./tests/run.sh
+        run: |
+          bash --version | head -n 1
+          ./tests/run.sh

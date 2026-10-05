@@ -1,74 +1,78 @@
-#!/usr/bin/env zsh
-# worktigre - Git Worktree Manager
-# Add this to your .zshrc: eval "$(wt-core --shell-init)"
-# Or source this file directly
+#compdef wt wt-core
+# worktigre - zsh completion for wt / wt-core
+#
+# Installed as _wt in an fpath directory (Homebrew, Nix), compinit loads it on
+# its own. It can also be sourced after compinit: it then registers itself.
+#
+# Completes the public flags, `-` (previous worktree), `.` (main worktree) and
+# the worktrees of the current repository, by branch or by directory name.
+# It only reads `git worktree list`, wt-core itself is never started.
 
-unalias wt 2>/dev/null
+_wt() {
+  local -a flags specials worktrees lines
+  local line wt_path wt_branch ret=1
 
-function wt() {
-  local output=$(WT_WRAPPED=1 wt-core "$@")
-  local target=""
-  local claude_cmd=""
+  # wt takes a single argument
+  (( CURRENT == 2 )) || return 1
 
-  # Parse output: path and optional CLAUDE marker (can be in any order)
-  while IFS= read -r line; do
-    if [[ "$line" == CLAUDE:* ]]; then
-      claude_cmd="$line"
-    elif [[ -n "$line" && -d "$line" ]]; then
-      target="$line"
-    fi
-  done <<< "$output"
+  flags=(
+    '--help:show the help'
+    '-h:show the help'
+    '--version:show the version'
+    '-v:show the version'
+    '--setup:add wt to your shell config'
+    '--wizard:run the preferences wizard again'
+    '--update:update to the latest release'
+    '--dev:use wt.sh from the current worktree'
+    '--release:use wt-core from PATH again'
+  )
+  specials=('-:previous worktree')
 
-  if [[ -n "$target" ]]; then
-    cd "$target"
-    echo "Navigated to: $target"
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    specials+=('.:main worktree')
+    lines=("${(@f)$(git worktree list --porcelain 2>/dev/null)}")
+    for line in "${lines[@]}" ''; do
+      case "$line" in
+        'worktree '*)
+          wt_path="${line#worktree }"
+          wt_branch=""
+          ;;
+        'branch refs/heads/'*)
+          wt_branch="${line#branch refs/heads/}"
+          ;;
+        '')
+          # End of a block: one entry per branch, one per directory name
+          if [[ -n "$wt_path" ]]; then
+            if [[ -n "$wt_branch" ]]; then
+              worktrees+=("${wt_branch//:/\\:}:${(D)wt_path}")
+            fi
+            if [[ "${wt_path:t}" != "$wt_branch" ]]; then
+              worktrees+=("${${wt_path:t}//:/\\:}:${wt_branch:-detached}")
+            fi
+          fi
+          wt_path=""
+          wt_branch=""
+          ;;
+      esac
+    done
+  fi
 
-    # Launch claude if marker present
-    if [[ -n "$claude_cmd" ]]; then
-      local type=$(echo "$claude_cmd" | cut -d: -f2)
-      local num=$(echo "$claude_cmd" | cut -d: -f3)
-      local mode=$(echo "$claude_cmd" | cut -d: -f4)
-
-      local claude_flags=""
-      local pr_term=$(wt-core --get-pr-term 2>/dev/null || echo "PR")
-
-      if [[ "$type" == "issue-auto" || "$type" == "ci-fix" ]]; then
-        claude_flags="--dangerously-skip-permissions"
-        if [[ "$type" == "issue-auto" ]]; then
-          echo ""
-          echo ">> AUTO-RESOLVE: Issue #$num"
-          echo "   Claude will plan, implement, and create a $pr_term automatically."
-          echo ""
-        else
-          echo ""
-          echo ">> AUTO-FIX CI: $pr_term #$num"
-          echo "   Claude will fetch CI logs, fix the issues, and push."
-          echo ""
-        fi
-      else
-        case "$mode" in
-          forced)
-            claude_flags="--dangerously-skip-permissions"
-            echo ""
-            echo ">> Starting Claude in FORCED mode..."
-            ;;
-          ask)
-            claude_flags=""
-            echo ""
-            echo "?> Starting Claude in ASK mode..."
-            ;;
-          plan)
-            claude_flags="--permission-mode=plan"
-            echo ""
-            echo "## Starting Claude in PLAN mode..."
-            ;;
-        esac
-        echo ""
-      fi
-
-      # Generate prompt dynamically (supports GitHub & GitLab)
-      local prompt=$(wt-core --generate-prompt "$type" "$num")
-      [[ -n "$prompt" ]] && claude $claude_flags "$prompt"
+  if [[ "$PREFIX" == -* ]]; then
+    _describe -t options 'option' flags && ret=0
+    _describe -t special 'shortcut' specials && ret=0
+  else
+    _describe -t special 'shortcut' specials && ret=0
+    if (( ${#worktrees} )); then
+      _describe -t worktrees 'worktree' worktrees && ret=0
     fi
   fi
+  return ret
 }
+
+# compinit autoloads this file as the body of _wt: run the completion.
+# Sourced by hand: register it.
+if [[ "${funcstack[1]}" == "_wt" ]]; then
+  _wt "$@"
+elif (( $+functions[compdef] )); then
+  compdef _wt wt wt-core
+fi
